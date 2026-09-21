@@ -1768,12 +1768,13 @@ pgoff_t page_cache_next_miss(struct address_space *mapping,
 	while (max_scan--) {
 		void *entry = xas_next(&xas);
 		if (!entry || xa_is_value(entry))
-			break;
+			return xas.xa_index;
 		if (xas.xa_index == 0)
-			break;
+			return 0;
 	}
 
-	return xas.xa_index;
+	/* Return end of the range + 1 when no hole is found */
+	return xas.xa_index + 1;
 }
 EXPORT_SYMBOL(page_cache_next_miss);
 
