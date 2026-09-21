@@ -4884,8 +4884,20 @@ retry:
 	 * If a complete cold-file batch is dirty and has not been queued for
 	 * writeback, reclaim cannot make progress without a flusher.
 	 */
-	if (stat.nr_unqueued_dirty == isolated)
+	if (stat.nr_unqueued_dirty == isolated) {
 		wakeup_flusher_threads(WB_REASON_VMSCAN);
+
+		/*
+		 * For cgroupv1 dirty throttling is achieved by waking up
+		 * the kernel flusher here and later waiting on pages
+		 * which are in writeback to finish (see shrink_page_list()).
+		 *
+		 * Flusher may not be able to issue writeback quickly
+		 * enough for cgroupv1 writeback throttling to work.
+		 */
+		if (!writeback_throttling_sane(sc))
+			congestion_wait(BLK_RW_ASYNC, HZ / 10);
+	}
 
 	list_for_each_entry_safe_reverse(page, next, &list, lru) {
 		bool bypass = false;
