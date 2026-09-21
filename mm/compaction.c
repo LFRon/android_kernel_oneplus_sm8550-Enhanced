@@ -54,6 +54,7 @@ static inline void count_compact_events(enum vm_event_item item, long delta)
 #define block_end_pfn(pfn, order)	ALIGN((pfn) + 1, 1UL << (order))
 #define pageblock_start_pfn(pfn)	block_start_pfn(pfn, pageblock_order)
 #define pageblock_end_pfn(pfn)		block_end_pfn(pfn, pageblock_order)
+#define pageblock_aligned(pfn)		IS_ALIGNED((pfn), pageblock_nr_pages)
 
 /*
  * Fragmentation score check interval for proactive compaction purposes.
@@ -1820,6 +1821,13 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 		return pfn;
 
 	/*
+	 * If the pageblock should be finished then do not select a different
+	 * pageblock.
+	 */
+	if (cc->rescan)
+		return pfn;
+
+	/*
 	 * If the migrate_pfn is not at the start of a zone or the start
 	 * of a pageblock then assume this is a continuation of a previous
 	 * scan restarted due to COMPACT_CLUSTER_MAX.
@@ -2453,6 +2461,7 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 			cc->rescan = true;
 		}
 
+rescan:
 		switch (isolate_migratepages(&cc_ext)) {
 		case ISOLATE_ABORT:
 			ret = COMPACT_CONTENDED;
@@ -2498,15 +2507,30 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 				goto out;
 			}
 			/*
-			 * We failed to migrate at least one page in the current
-			 * order-aligned block, so skip the rest of it.
+			 * If an ASYNC or SYNC_LIGHT fails to migrate a page
+			 * within the current order-aligned block and
+			 * fast_find_migrateblock may be used then scan the
+			 * remainder of the pageblock. This will mark the
+			 * pageblock "skip" to avoid rescanning in the near
+			 * future. This will isolate more pages than necessary
+			 * for the request but avoid loops due to
+			 * fast_find_migrateblock revisiting blocks that were
+			 * recently partially scanned.
 			 */
-			if (cc->direct_compaction &&
-						(cc->mode == MIGRATE_ASYNC)) {
-				cc->migrate_pfn = block_end_pfn(
-						cc->migrate_pfn - 1, cc->order);
-				/* Draining pcplists is useless in this case */
-				last_migrated_pfn = 0;
+			if (!pageblock_aligned(cc->migrate_pfn) &&
+			    !cc->ignore_skip_hint && !cc->rescan &&
+			    (cc->mode < MIGRATE_SYNC)) {
+				cc->rescan = true;
+
+				/*
+				 * Draining pcplists does not help THP if
+				 * any page failed to migrate. Even after
+				 * drain, the pageblock will not be free.
+				 */
+				if (cc->order == pageblock_order)
+					last_migrated_pfn = 0;
+
+				goto rescan;
 			}
 		}
 
