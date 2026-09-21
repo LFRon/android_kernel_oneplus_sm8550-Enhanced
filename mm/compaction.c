@@ -1440,8 +1440,9 @@ static int next_search_order(struct compact_control *cc, int order)
 }
 
 static unsigned long
-fast_isolate_freepages(struct compact_control *cc)
+fast_isolate_freepages(struct compact_control_ext *cc_ext)
 {
+	struct compact_control *cc = cc_ext->cc;
 	unsigned int limit = max(1U, freelist_scan_limit(cc) >> 1);
 	unsigned int nr_scanned = 0;
 	unsigned long low_pfn, min_pfn, highest = 0;
@@ -1578,6 +1579,10 @@ fast_isolate_freepages(struct compact_control *cc)
 						min(pageblock_end_pfn(min_pfn),
 						    zone_end_pfn(cc->zone)),
 						cc->zone);
+					if (page &&
+					    !suitable_migration_target(cc_ext, page))
+						page = NULL;
+
 					cc->free_pfn = min_pfn;
 				}
 			}
@@ -1616,7 +1621,7 @@ static void isolate_freepages(struct compact_control_ext *cc_ext)
 	bool bypass = false;
 
 	/* Try a small search of the free lists for a candidate */
-	isolate_start_pfn = fast_isolate_freepages(cc);
+	isolate_start_pfn = fast_isolate_freepages(cc_ext);
 	if (cc->nr_freepages)
 		goto splitmap;
 
