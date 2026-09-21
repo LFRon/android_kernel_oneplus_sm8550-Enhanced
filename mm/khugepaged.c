@@ -439,6 +439,12 @@ static inline int khugepaged_test_exit(struct mm_struct *mm)
 	return atomic_read(&mm->mm_users) == 0;
 }
 
+static inline int khugepaged_test_exit_or_disable(struct mm_struct *mm)
+{
+	return khugepaged_test_exit(mm) ||
+	       test_bit(MMF_DISABLE_THP, &mm->flags);
+}
+
 static bool hugepage_vma_check(struct vm_area_struct *vma,
 			       unsigned long vm_flags)
 {
@@ -2160,7 +2166,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages,
 	vma = NULL;
 	if (unlikely(!mmap_read_trylock(mm)))
 		goto breakouterloop_mmap_lock;
-	if (likely(!khugepaged_test_exit(mm)))
+	if (likely(!khugepaged_test_exit_or_disable(mm)))
 		vma = find_vma(mm, khugepaged_scan.address);
 
 	progress++;
@@ -2168,7 +2174,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages,
 		unsigned long hstart, hend;
 
 		cond_resched();
-		if (unlikely(khugepaged_test_exit(mm))) {
+		if (unlikely(khugepaged_test_exit_or_disable(mm))) {
 			progress++;
 			break;
 		}
@@ -2192,7 +2198,7 @@ skip:
 		while (khugepaged_scan.address < hend) {
 			int ret;
 			cond_resched();
-			if (unlikely(khugepaged_test_exit(mm)))
+			if (unlikely(khugepaged_test_exit_or_disable(mm)))
 				goto breakouterloop;
 
 			VM_BUG_ON(khugepaged_scan.address < hstart ||
