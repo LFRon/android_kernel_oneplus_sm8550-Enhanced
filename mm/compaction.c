@@ -2541,6 +2541,12 @@ rescan:
 			}
 		}
 
+		/* Stop if a page has been captured */
+		if (capc && capc->page) {
+			ret = COMPACT_SUCCESS;
+			break;
+		}
+
 check_drain:
 		/*
 		 * Has the migration scanner moved away from the previous
@@ -2560,11 +2566,6 @@ check_drain:
 			}
 		}
 
-		/* Stop if a page has been captured */
-		if (capc && capc->page) {
-			ret = COMPACT_SUCCESS;
-			break;
-		}
 	}
 
 out:
