@@ -2921,8 +2921,18 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	}
 
 	if (!(flags & SCA_MIGRATE_ENABLE)) {
-		if (cpumask_equal(&p->cpus_mask, new_mask))
+		if (cpumask_equal(&p->cpus_mask, new_mask)) {
+			/*
+			 * A successful sched_setaffinity() must always
+			 * invalidate the cpuset-saved mask, even when the new
+			 * mask equals the current one; otherwise a later cpuset
+			 * relaxation resurrects an affinity the user has just
+			 * (re)confirmed.
+			 */
+			if (flags & SCA_USER)
+				kfree(clear_user_cpus_ptr(p));
 			goto out;
+		}
 
 		if (WARN_ON_ONCE(p == current &&
 				 is_migration_disabled(p) &&
