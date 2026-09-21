@@ -790,8 +790,9 @@ EXPORT_SYMBOL_GPL(isolate_and_split_free_page);
 #endif
 
 /* Similar to reclaim, but different enough that they don't share logic */
-static bool too_many_isolated(pg_data_t *pgdat)
+static bool too_many_isolated(struct compact_control *cc)
 {
+	pg_data_t *pgdat __maybe_unused = cc->zone->zone_pgdat;
 	unsigned long active, inactive, isolated;
 
 	inactive = node_page_state(pgdat, NR_INACTIVE_FILE) +
@@ -800,6 +801,17 @@ static bool too_many_isolated(pg_data_t *pgdat)
 			node_page_state(pgdat, NR_ACTIVE_ANON);
 	isolated = node_page_state(pgdat, NR_ISOLATED_FILE) +
 			node_page_state(pgdat, NR_ISOLATED_ANON);
+
+	/*
+	 * Allow GFP_NOFS to isolate past the limit set for regular
+	 * compaction runs. This prevents an ABBA deadlock when other
+	 * compactors have already isolated to the limit, but are
+	 * blocked on filesystem locks held by the GFP_NOFS thread.
+	 */
+	if (cc->gfp_mask & __GFP_FS) {
+		inactive >>= 3;
+		active >>= 3;
+	}
 
 	return isolated > (inactive + active) / 2;
 }
@@ -826,7 +838,6 @@ isolate_migratepages_block(struct compact_control_ext *cc_ext, unsigned long low
 			unsigned long end_pfn, isolate_mode_t mode)
 {
 	struct compact_control *cc = cc_ext->cc;
-	pg_data_t *pgdat = cc->zone->zone_pgdat;
 	unsigned long nr_scanned = 0, nr_isolated = 0;
 	struct lruvec *lruvec;
 	unsigned long flags = 0;
@@ -846,7 +857,7 @@ isolate_migratepages_block(struct compact_control_ext *cc_ext, unsigned long low
 	 * list by either parallel reclaimers or compaction. If there are,
 	 * delay for some time until fewer pages are isolated
 	 */
-	while (unlikely(too_many_isolated(pgdat))) {
+	while (unlikely(too_many_isolated(cc))) {
 		/* stop isolation if there are still pages not migrated */
 		if (cc->nr_migratepages)
 			return -EAGAIN;
