@@ -248,7 +248,7 @@ retry:
 		if (!__is_valid_data_blkaddr(new_addr)) {
 			if (new_addr == NULL_ADDR)
 				dec_valid_block_count(sbi, inode, 1);
-			f2fs_invalidate_blocks(sbi, dn.data_blkaddr);
+			f2fs_invalidate_blocks(sbi, dn.data_blkaddr, 1);
 			f2fs_update_data_blkaddr(&dn, new_addr);
 		} else {
 			f2fs_replace_block(sbi, &dn, dn.data_blkaddr,
@@ -2323,26 +2323,36 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 		get_sec_entry(sbi, segno)->valid_blocks += del;
 }
 
-void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr)
+void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr,
+				unsigned int len)
 {
 	unsigned int segno = GET_SEGNO(sbi, addr);
+	unsigned int end_segno = GET_SEGNO(sbi, addr + len - 1);
 	struct sit_info *sit_i = SIT_I(sbi);
+	block_t addr_end = addr + len - 1;
+	unsigned int i;
 
 	f2fs_bug_on(sbi, addr == NULL_ADDR);
 	if (addr == NEW_ADDR || addr == COMPRESS_ADDR)
 		return;
 
-	invalidate_mapping_pages(META_MAPPING(sbi), addr, addr);
-	f2fs_invalidate_compress_page(sbi, addr);
+	invalidate_mapping_pages(META_MAPPING(sbi), addr, addr_end);
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	if (sbi->compress_inode)
+		invalidate_mapping_pages(COMPRESS_MAPPING(sbi), addr, addr_end);
+#endif
 
 	/* add it into sit main buffer */
 	down_write(&sit_i->sentry_lock);
 
-	update_segment_mtime(sbi, addr, 0);
-	update_sit_entry(sbi, addr, -1);
+	for (i = 0; i < len; i++) {
+		update_segment_mtime(sbi, addr + i, 0);
+		update_sit_entry(sbi, addr + i, -1);
+	}
 
 	/* add it into dirty seglist */
-	locate_dirty_segment(sbi, segno);
+	for (i = segno; i <= end_segno; i++)
+		locate_dirty_segment(sbi, i);
 
 	up_write(&sit_i->sentry_lock);
 }
