@@ -931,11 +931,12 @@ isolate_migratepages_block(struct compact_control_ext *cc_ext, unsigned long low
 
 		/*
 		 * Check if the pageblock has already been marked skipped.
-		 * Only the aligned PFN is checked as the caller isolates
+		 * Only the first PFN is checked as the caller isolates
 		 * COMPACT_CLUSTER_MAX at a time so the second call must
 		 * not falsely conclude that the block should be skipped.
 		 */
-		if (!valid_page && IS_ALIGNED(low_pfn, pageblock_nr_pages)) {
+		if (!valid_page && (IS_ALIGNED(low_pfn, pageblock_nr_pages) ||
+				    low_pfn == cc->zone->zone_start_pfn)) {
 			if (!cc->ignore_skip_hint && get_pageblock_skip(page)) {
 				low_pfn = end_pfn;
 				page = NULL;
@@ -2008,7 +2009,8 @@ static isolate_migrate_t isolate_migratepages(struct compact_control_ext *cc_ext
 		 * before making it "skip" so other compaction instances do
 		 * not scan the same block.
 		 */
-		if (IS_ALIGNED(low_pfn, pageblock_nr_pages) &&
+		if ((IS_ALIGNED(low_pfn, pageblock_nr_pages) ||
+		     low_pfn == cc->zone->zone_start_pfn) &&
 		    !fast_find_block && !isolation_suitable(cc, page))
 			continue;
 
