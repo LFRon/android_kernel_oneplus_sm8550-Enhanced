@@ -71,6 +71,9 @@ static int erofs_readdir(struct file *f, struct dir_context *ctx)
 	struct inode *dir = file_inode(f);
 	struct address_space *mapping = dir->i_mapping;
 	const size_t dirsize = i_size_read(dir);
+	struct file_ra_state *ra = &f->f_ra;
+	const pgoff_t nr_pages = DIV_ROUND_UP(dirsize, PAGE_SIZE);
+	const pgoff_t ra_pages = DIV_ROUND_UP((size_t)EROFS_DIR_RA_BYTES, PAGE_SIZE);
 	unsigned int i = ctx->pos / EROFS_BLKSIZ;
 	unsigned int ofs = ctx->pos % EROFS_BLKSIZ;
 	int err = 0;
@@ -84,6 +87,16 @@ static int erofs_readdir(struct file *f, struct dir_context *ctx)
 		if (fatal_signal_pending(current)) {
 			err = -ERESTARTSYS;
 			break;
+		}
+
+		/* readahead blocks to enhance performance for large directories */
+		if (ra_pages) {
+			pgoff_t idx = DIV_ROUND_UP(ctx->pos, PAGE_SIZE);
+			pgoff_t pages = min_t(pgoff_t, nr_pages - idx, ra_pages);
+
+			if (pages > 1)
+				page_cache_sync_readahead(mapping, ra, f,
+							  idx, pages);
 		}
 
 		dentry_page = read_mapping_page(mapping, i, NULL);
