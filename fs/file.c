@@ -1045,6 +1045,17 @@ static inline bool file_needs_f_pos_lock(struct file *file)
 		(file_count(file) > 1 || S_ISDIR(file_inode(file)->i_mode));
 }
 
+bool file_seek_cur_needs_f_lock(struct file *file)
+{
+	if (!(file->f_mode & FMODE_ATOMIC_POS) &&
+	    !S_ISDIR(file_inode(file)->i_mode))
+		return false;
+
+	WARN_ON_ONCE((file_count(file) > 1) &&
+		     !mutex_is_locked(&file->f_pos_lock));
+	return true;
+}
+
 unsigned long __fdget_pos(unsigned int fd)
 {
 	unsigned long v = __fdget(fd);
