@@ -853,6 +853,7 @@ static int __init erofs_module_init(void)
 		goto lzma_err;
 
 	erofs_pcpubuf_init();
+	(void)erofs_rsvbuf_init();
 	err = z_erofs_init_zip_subsystem();
 	if (err)
 		goto zip_err;
@@ -893,6 +894,7 @@ static void __exit erofs_module_exit(void)
 	z_erofs_lzma_exit();
 	erofs_exit_shrinker();
 	kmem_cache_destroy(erofs_inode_cachep);
+	erofs_rsvbuf_exit();
 	erofs_pcpubuf_exit();
 }
 
