@@ -2019,6 +2019,7 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 	unsigned long nr_skipped[MAX_NR_ZONES] = { 0, };
 	unsigned long skipped = 0;
 	unsigned long scan, total_scan, nr_pages;
+	unsigned long max_nr_skipped = 0;
 	LIST_HEAD(pages_skipped);
 
 	total_scan = 0;
@@ -2033,9 +2034,11 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 		nr_pages = compound_nr(page);
 		total_scan += nr_pages;
 
-		if (page_zonenum(page) > sc->reclaim_idx) {
+		if (max_nr_skipped < SWAP_CLUSTER_MAX_SKIPPED &&
+		    (page_zonenum(page) > sc->reclaim_idx)) {
 			nr_skipped[page_zonenum(page)] += nr_pages;
 			move_to = &pages_skipped;
+			max_nr_skipped++;
 			goto move;
 		}
 
