@@ -81,6 +81,11 @@ static int erofs_readdir(struct file *f, struct dir_context *ctx)
 		struct erofs_dirent *de;
 		unsigned int nameoff, maxsize;
 
+		if (fatal_signal_pending(current)) {
+			err = -ERESTARTSYS;
+			break;
+		}
+
 		dentry_page = read_mapping_page(mapping, i, NULL);
 		if (dentry_page == ERR_PTR(-ENOMEM)) {
 			err = -ENOMEM;
@@ -131,6 +136,7 @@ skip_this:
 			break;
 		++i;
 		ofs = 0;
+		cond_resched();
 	}
 	return err < 0 ? err : 0;
 }
