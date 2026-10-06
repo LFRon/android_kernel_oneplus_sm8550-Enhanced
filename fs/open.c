@@ -61,7 +61,9 @@ int do_truncate(struct user_namespace *mnt_userns, struct dentry *dentry,
 	if (ret)
 		newattrs.ia_valid |= ret | ATTR_FORCE;
 
-	inode_lock(dentry->d_inode);
+	ret = down_write_killable(&dentry->d_inode->i_rwsem);
+	if (ret)
+		return ret;
 	/* Note any delegations or leases have already been broken: */
 	ret = notify_change(mnt_userns, dentry, &newattrs, NULL);
 	inode_unlock(dentry->d_inode);
