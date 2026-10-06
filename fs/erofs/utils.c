@@ -5,17 +5,68 @@
  */
 #include "internal.h"
 #include <linux/pagevec.h>
+#include <linux/module.h>
 
-struct page *erofs_allocpage(struct page **pagepool, gfp_t gfp)
+/*
+ * A global reserved page pool for low-latency decompression (currently only
+ * used by LZ4): transient decompression pages are recycled here instead of
+ * being returned to the page allocator, so low-memory readahead does not pay
+ * for repeated allocations.  Disabled by default (reserved_pages == 0).
+ */
+struct z_erofs_rsvbuf {
+	spinlock_t lock;
+	unsigned int nrpages;
+	struct page **pages;
+};
+
+static struct z_erofs_rsvbuf z_erofs_rsv;
+static unsigned int z_erofs_rsv_nrpages;
+
+module_param_named(reserved_pages, z_erofs_rsv_nrpages, uint, 0444);
+
+int __init erofs_rsvbuf_init(void)
+{
+	if (!z_erofs_rsv_nrpages)
+		return 0;
+
+	z_erofs_rsv.pages = kcalloc(z_erofs_rsv_nrpages,
+			sizeof(struct page *), GFP_KERNEL);
+	if (!z_erofs_rsv.pages) {
+		z_erofs_rsv_nrpages = 0;
+		return -ENOMEM;
+	}
+	spin_lock_init(&z_erofs_rsv.lock);
+	return 0;
+}
+
+void erofs_rsvbuf_exit(void)
+{
+	if (!z_erofs_rsv.pages)
+		return;
+
+	spin_lock(&z_erofs_rsv.lock);
+	while (z_erofs_rsv.nrpages)
+		put_page(z_erofs_rsv.pages[--z_erofs_rsv.nrpages]);
+	spin_unlock(&z_erofs_rsv.lock);
+	kfree(z_erofs_rsv.pages);
+	z_erofs_rsv.pages = NULL;
+}
+
+struct page *__erofs_allocpage(struct page **pagepool, gfp_t gfp, bool tryrsv)
 {
 	struct page *page = *pagepool;
 
 	if (page) {
-		DBG_BUGON(page_ref_count(page) != 1);
 		*pagepool = (struct page *)page_private(page);
-	} else {
-		page = alloc_page(gfp);
+	} else if (tryrsv && z_erofs_rsv.pages && z_erofs_rsv.nrpages) {
+		spin_lock(&z_erofs_rsv.lock);
+		if (z_erofs_rsv.nrpages)
+			page = z_erofs_rsv.pages[--z_erofs_rsv.nrpages];
+		spin_unlock(&z_erofs_rsv.lock);
 	}
+	if (!page)
+		page = alloc_page(gfp);
+	DBG_BUGON(page && page_ref_count(page) != 1);
 	return page;
 }
 
@@ -25,6 +76,18 @@ void erofs_release_pages(struct page **pagepool)
 		struct page *page = *pagepool;
 
 		*pagepool = (struct page *)page_private(page);
+		/* try to fill the reserved global pool first */
+		if (z_erofs_rsv.pages &&
+		    z_erofs_rsv.nrpages < z_erofs_rsv_nrpages) {
+			spin_lock(&z_erofs_rsv.lock);
+			if (z_erofs_rsv.nrpages < z_erofs_rsv_nrpages) {
+				z_erofs_rsv.pages[z_erofs_rsv.nrpages++] =
+								page;
+				spin_unlock(&z_erofs_rsv.lock);
+				continue;
+			}
+			spin_unlock(&z_erofs_rsv.lock);
+		}
 		put_page(page);
 	}
 }
