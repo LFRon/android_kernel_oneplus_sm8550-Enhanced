@@ -376,8 +376,11 @@ static int f2fs_create(struct user_namespace *mnt_userns, struct inode *dir,
 
 	d_instantiate_new(dentry, inode);
 
-	if (IS_DIRSYNC(dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			return err;
+	}
 
 	f2fs_balance_fs(sbi, true);
 	return 0;
@@ -425,8 +428,11 @@ static int f2fs_link(struct dentry *old_dentry, struct inode *dir,
 
 	d_instantiate(dentry, inode);
 
-	if (IS_DIRSYNC(dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			return err;
+	}
 	return 0;
 out:
 	clear_inode_flag(inode, FI_INC_LINK);
@@ -584,8 +590,11 @@ static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
 	if (IS_CASEFOLDED(dir))
 		d_invalidate(dentry);
 #endif
-	if (IS_DIRSYNC(dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			goto fail;
+	}
 fail:
 	trace_f2fs_unlink_exit(inode, err);
 	return err;
@@ -670,7 +679,7 @@ err_out:
 							disk_link.len - 1);
 
 		if (IS_DIRSYNC(dir))
-			f2fs_sync_fs(sbi->sb, 1);
+			err = f2fs_sync_fs(sbi->sb, 1);
 	} else {
 		f2fs_unlink(dir, dentry);
 	}
@@ -720,8 +729,11 @@ static int f2fs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
 
 	d_instantiate_new(dentry, inode);
 
-	if (IS_DIRSYNC(dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			return err;
+	}
 
 	f2fs_balance_fs(sbi, true);
 	return 0;
@@ -774,8 +786,11 @@ static int f2fs_mknod(struct user_namespace *mnt_userns, struct inode *dir,
 
 	d_instantiate_new(dentry, inode);
 
-	if (IS_DIRSYNC(dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			return err;
+	}
 
 	f2fs_balance_fs(sbi, true);
 	return 0;
@@ -1057,8 +1072,11 @@ static int f2fs_rename(struct user_namespace *mnt_userns, struct inode *old_dir,
 
 	f2fs_unlock_op(sbi);
 
-	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			return err;
+	}
 
 	f2fs_update_time(sbi, REQ_TIME);
 	return 0;
@@ -1220,8 +1238,11 @@ static int f2fs_cross_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	f2fs_unlock_op(sbi);
 
-	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir)) {
+		err = f2fs_sync_fs(sbi->sb, 1);
+		if (err)
+			return err;
+	}
 
 	f2fs_update_time(sbi, REQ_TIME);
 	return 0;
