@@ -194,6 +194,9 @@ extern const struct dentry_operations ns_dentry_operations;
 /* direct-io.c: */
 int sb_init_dio_done_wq(struct super_block *sb);
 
+/* fs/file.c: */
+bool file_seek_cur_needs_f_lock(struct file *file);
+
 /*
  * fs/stat.c:
  */
