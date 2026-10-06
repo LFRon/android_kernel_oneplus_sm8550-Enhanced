@@ -2069,26 +2069,37 @@ static void khugepaged_scan_file(struct mm_struct *mm,
 			continue;
 		}
 
+		if (!get_page_unless_zero(page))
+			continue;
+		if (unlikely(page != xas_reload(&xas))) {
+			put_page(page);
+			continue;
+		}
+
 		if (PageTransCompound(page)) {
 			result = SCAN_PAGE_COMPOUND;
+			put_page(page);
 			break;
 		}
 
 		node = page_to_nid(page);
 		if (khugepaged_scan_abort(node)) {
 			result = SCAN_SCAN_ABORT;
+			put_page(page);
 			break;
 		}
 		khugepaged_node_load[node]++;
 
 		if (!PageLRU(page)) {
 			result = SCAN_PAGE_LRU;
+			put_page(page);
 			break;
 		}
 
 		if (page_count(page) !=
-		    1 + page_mapcount(page) + page_has_private(page)) {
+		    2 + page_mapcount(page) + page_has_private(page)) {
 			result = SCAN_PAGE_COUNT;
+			put_page(page);
 			break;
 		}
 
@@ -2099,6 +2110,7 @@ static void khugepaged_scan_file(struct mm_struct *mm,
 		 */
 
 		present++;
+		put_page(page);
 
 		if (need_resched()) {
 			xas_pause(&xas);
