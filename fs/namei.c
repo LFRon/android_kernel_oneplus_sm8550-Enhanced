@@ -947,8 +947,8 @@ static int complete_walk(struct nameidata *nd)
 		 * We don't want to zero nd->root for scoped-lookups or
 		 * externally-managed nd->root.
 		 */
-		if (!(nd->state & ND_ROOT_PRESET))
-			if (!(nd->flags & LOOKUP_IS_SCOPED))
+		if (likely(!(nd->state & ND_ROOT_PRESET)))
+			if (likely(!(nd->flags & LOOKUP_IS_SCOPED)))
 				nd->root.mnt = NULL;
 		nd->flags &= ~LOOKUP_CACHED;
 		if (!try_to_unlazy(nd))
@@ -1030,7 +1030,7 @@ static int nd_jump_root(struct nameidata *nd)
 	}
 	if (!nd->root.mnt) {
 		int error = set_root(nd);
-		if (error)
+		if (unlikely(error))
 			return error;
 	}
 	if (nd->flags & LOOKUP_RCU) {
@@ -2009,7 +2009,7 @@ static const char *handle_dots(struct nameidata *nd, int type)
 
 		if (!nd->root.mnt) {
 			error = ERR_PTR(set_root(nd));
-			if (error)
+			if (unlikely(error))
 				return error;
 		}
 		if (nd->flags & LOOKUP_RCU)
@@ -2417,10 +2417,10 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	const char *s = nd->name->name;
 
 	/* LOOKUP_CACHED requires RCU, ask caller to retry */
-	if ((flags & (LOOKUP_RCU | LOOKUP_CACHED)) == LOOKUP_CACHED)
+	if (unlikely((flags & (LOOKUP_RCU | LOOKUP_CACHED)) == LOOKUP_CACHED))
 		return ERR_PTR(-EAGAIN);
 
-	if (!*s)
+	if (unlikely(!*s))
 		flags &= ~LOOKUP_RCU;
 	if (flags & LOOKUP_RCU)
 		rcu_read_lock();
@@ -2432,7 +2432,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	nd->r_seq = __read_seqcount_begin(&rename_lock.seqcount);
 	smp_rmb();
 
-	if (nd->state & ND_ROOT_PRESET) {
+	if (unlikely(nd->state & ND_ROOT_PRESET)) {
 		struct dentry *root = nd->root.dentry;
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
@@ -2451,7 +2451,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	nd->root.mnt = NULL;
 
 	/* Absolute pathname -- fetch the root (LOOKUP_IN_ROOT uses nd->dfd). */
-	if (*s == '/' && !(flags & LOOKUP_IN_ROOT)) {
+	if (*s == '/' && likely(!(flags & LOOKUP_IN_ROOT))) {
 		error = nd_jump_root(nd);
 		if (unlikely(error))
 			return ERR_PTR(error);
@@ -2501,7 +2501,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	}
 
 	/* For scoped-lookups we need to set the root to the dirfd as well. */
-	if (flags & LOOKUP_IS_SCOPED) {
+	if (unlikely(flags & LOOKUP_IS_SCOPED)) {
 		nd->root = nd->path;
 		if (flags & LOOKUP_RCU) {
 			nd->root_seq = nd->seq;
