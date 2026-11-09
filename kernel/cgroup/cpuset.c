@@ -420,6 +420,12 @@ static inline void check_insane_mems_config(nodemask_t *nodes)
 }
 
 /*
+ * Set if "cpuset_v2_mode" mount option is used
+ * Cached at bind time and not lock protected; accessed via {READ,WRITE}_ONCE
+ */
+static bool cpuset_v2_mode;
+
+/*
  * Cgroup v2 behavior is used on the "cpus" and "mems" control files when
  * on default hierarchy or when the cpuset_v2_mode flag is set by mounting
  * the v1 cpuset cgroup filesystem with the "cpuset_v2_mode" mount option.
@@ -430,7 +436,7 @@ static inline void check_insane_mems_config(nodemask_t *nodes)
 static inline bool is_in_v2_mode(void)
 {
 	return cgroup_subsys_on_dfl(cpuset_cgrp_subsys) ||
-	      (cpuset_cgrp_subsys.root->flags & CGRP_ROOT_CPUSET_V2_MODE);
+	      READ_ONCE(cpuset_v2_mode);
 }
 
 /*
@@ -3053,6 +3059,8 @@ static void cpuset_bind(struct cgroup_subsys_state *root_css)
 	mutex_lock(&cpuset_mutex);
 	spin_lock_irq(&callback_lock);
 
+	WRITE_ONCE(cpuset_v2_mode,
+		   !!(cpuset_cgrp_subsys.root->flags & CGRP_ROOT_CPUSET_V2_MODE));
 	if (is_in_v2_mode()) {
 		cpumask_copy(top_cpuset.cpus_allowed, cpu_possible_mask);
 		top_cpuset.mems_allowed = node_possible_map;
